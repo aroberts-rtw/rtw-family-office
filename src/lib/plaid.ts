@@ -14,10 +14,10 @@ const configuration = new Configuration({
 
 export const plaidClient = new PlaidApi(configuration)
 
+// Transactions works across all institution types (banks, credit cards, brokerages)
+// Investments and Liabilities are fetched after connection based on account type
 export const PLAID_PRODUCTS: Products[] = [
   Products.Transactions,
-  Products.Investments,
-  Products.Liabilities,
 ]
 
 export const PLAID_COUNTRY_CODES: CountryCode[] = [CountryCode.Us]
