@@ -99,3 +99,15 @@ model InsurancePolicy {
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
 }
+
+// Manually entered assets (real estate, vehicles, business equity, etc.)
+model ManualAsset {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  category    String   // Real Estate, Vehicle, Business Equity, Other
+  value       Float
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
