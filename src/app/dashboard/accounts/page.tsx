@@ -1,131 +1,41 @@
 import { auth } from '@clerk/nextjs/server'
 import { db } from '@/lib/db'
 import ManualAssets from '@/components/ManualAssets'
-
-type Account = Awaited<ReturnType<typeof getAccounts>>[number]
-
-async function getAccounts(userId: string) {
-  return db.account.findMany({
-    where: { plaidItem: { userId } },
-    include: { plaidItem: true },
-    orderBy: { currentBalance: 'desc' },
-  })
-}
-
-const CATEGORIES: { label: string; types: string[]; asset: boolean }[] = [
-  { label: 'Cash & Banking',  types: ['depository'], asset: true  },
-  { label: 'Investments',     types: ['investment'], asset: true  },
-  { label: 'Credit Cards',    types: ['credit'],     asset: false },
-  { label: 'Loans',           types: ['loan'],       asset: false },
-  { label: 'Other',           types: ['other'],      asset: true  },
-]
-
-function categorize(accounts: Account[]) {
-  const buckets: Record<string, Account[]> = Object.fromEntries(CATEGORIES.map((c) => [c.label, []]))
-  for (const a of accounts) {
-    const cat = CATEGORIES.find((c) => c.types.includes(a.type)) ?? CATEGORIES[CATEGORIES.length - 1]
-    buckets[cat.label].push(a)
-  }
-  return buckets
-}
+import AccountsClient from '@/components/AccountsClient'
 
 export default async function AccountsPage() {
   const { userId } = await auth()
-  const [accounts, manualAssets] = await Promise.all([
-    getAccounts(userId!),
+
+  const [plaidItems, manualAssets] = await Promise.all([
+    db.plaidItem.findMany({
+      where: { userId: userId! },
+      include: { accounts: { orderBy: { currentBalance: 'desc' } } },
+      orderBy: { institutionName: 'asc' },
+    }),
     db.manualAsset.findMany({ where: { userId: userId! }, orderBy: { category: 'asc' } }),
   ])
 
-  const buckets = categorize(accounts)
+  const manualTotal = manualAssets.reduce((s, a) => s + a.value, 0)
 
-  const plaidAssets = CATEGORIES.filter((c) => c.asset)
-    .flatMap((c) => buckets[c.label])
-    .reduce((sum, a) => sum + (a.currentBalance ?? 0), 0)
-
-  const manualTotal = manualAssets.reduce((sum, a) => sum + a.value, 0)
-  const totalAssets = plaidAssets + manualTotal
-
-  const totalLiabilities = CATEGORIES.filter((c) => !c.asset)
-    .flatMap((c) => buckets[c.label])
-    .reduce((sum, a) => sum + Math.abs(a.currentBalance ?? 0), 0)
-
-  const netWorth = totalAssets - totalLiabilities
+  const serialized = plaidItems.map((item) => ({
+    id: item.id,
+    institutionName: item.institutionName ?? 'Unknown',
+    isBusinessAccount: item.isBusinessAccount,
+    accounts: item.accounts.map((a) => ({
+      id: a.id,
+      name: a.name,
+      type: a.type,
+      subtype: a.subtype,
+      mask: a.mask,
+      currentBalance: a.currentBalance,
+      availableBalance: a.availableBalance,
+    })),
+  }))
 
   return (
     <div className="space-y-8">
       <h1 className="text-2xl font-semibold">Accounts</h1>
-
-      {/* Summary bar */}
-      <div className="grid grid-cols-3 gap-4">
-        <SummaryCard label="Net Worth" value={netWorth} highlight />
-        <SummaryCard label="Total Assets" value={totalAssets} />
-        <SummaryCard label="Total Liabilities" value={totalLiabilities} negative />
-      </div>
-
-      {/* Plaid account categories */}
-      {CATEGORIES.map((cat) => {
-        const accts = buckets[cat.label]
-        if (accts.length === 0) return null
-        const catTotal = accts.reduce((s, a) => s + Math.abs(a.currentBalance ?? 0), 0)
-        return (
-          <div key={cat.label} className="space-y-2">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wide">{cat.label}</h2>
-              <span className={`text-sm font-semibold ${!cat.asset ? 'text-red-400' : ''}`}>
-                {!cat.asset ? '−' : ''}{fmt(catTotal)}
-              </span>
-            </div>
-            <div className="space-y-1">
-              {accts.map((a) => (
-                <div key={a.id} className="bg-gray-900 rounded-lg px-4 py-3 flex justify-between items-center">
-                  <div>
-                    <p className="text-sm font-medium">{a.name}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      {a.plaidItem.institutionName}
-                      {a.subtype ? ` · ${a.subtype}` : ''}
-                      {a.mask ? ` ···${a.mask}` : ''}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className={`text-sm font-semibold ${!cat.asset ? 'text-red-400' : ''}`}>
-                      {fmt(Math.abs(a.currentBalance ?? 0))}
-                    </p>
-                    {a.availableBalance != null && a.availableBalance !== a.currentBalance && (
-                      <p className="text-xs text-gray-500">{fmt(a.availableBalance)} avail</p>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )
-      })}
-
-      {/* Manual assets (real estate, vehicles, etc.) */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wide">Property & Other Assets</h2>
-          {manualTotal > 0 && <span className="text-sm font-semibold">{fmt(manualTotal)}</span>}
-        </div>
-        <ManualAssets initial={manualAssets} />
-      </div>
+      <AccountsClient items={serialized} manualAssets={manualAssets} manualTotal={manualTotal} />
     </div>
   )
-}
-
-function SummaryCard({ label, value, highlight, negative }: {
-  label: string; value: number; highlight?: boolean; negative?: boolean
-}) {
-  return (
-    <div className={`rounded-xl p-5 ${highlight ? 'bg-blue-950 border border-blue-800' : 'bg-gray-900'}`}>
-      <p className="text-xs text-gray-400 uppercase tracking-wide">{label}</p>
-      <p className={`text-2xl font-semibold mt-2 ${negative ? 'text-red-400' : ''}`}>{fmt(value)}</p>
-    </div>
-  )
-}
-
-function fmt(v: number) {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0,
-  }).format(v)
 }

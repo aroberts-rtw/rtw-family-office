@@ -9,16 +9,17 @@ datasource db {
 
 // One row per connected institution (bank, brokerage, etc.)
 model PlaidItem {
-  id              String    @id @default(cuid())
-  userId          String
-  accessToken     String
-  itemId          String    @unique
-  institutionId   String?
-  institutionName String?
-  cursor          String?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
-  accounts        Account[]
+  id                String    @id @default(cuid())
+  userId            String
+  accessToken       String
+  itemId            String    @unique
+  institutionId     String?
+  institutionName   String?
+  cursor            String?
+  isBusinessAccount Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  accounts          Account[]
 }
 
 model Account {
@@ -98,6 +99,21 @@ model InsurancePolicy {
   notes            String?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
+}
+
+// Financial goals
+model Goal {
+  id          String    @id @default(cuid())
+  userId      String
+  name        String
+  targetAmount Float
+  currentAmount Float   @default(0)
+  targetDate  DateTime?
+  category    String    // Emergency Fund, Debt Payoff, Investment, Home, Retirement, Education, Other
+  notes       String?
+  completed   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 }
 
 // Manually entered assets (real estate, vehicles, business equity, etc.)

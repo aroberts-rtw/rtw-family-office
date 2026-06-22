@@ -2,13 +2,14 @@ import { UserButton } from '@clerk/nextjs'
 import Link from 'next/link'
 
 const nav = [
-  { href: '/dashboard', label: 'Overview' },
-  { href: '/dashboard/accounts', label: 'Accounts' },
+  { href: '/dashboard',              label: 'Overview' },
+  { href: '/dashboard/accounts',     label: 'Accounts' },
   { href: '/dashboard/transactions', label: 'Transactions' },
-  { href: '/dashboard/investments', label: 'Investments' },
-  { href: '/dashboard/tax', label: 'Tax' },
-  { href: '/dashboard/insurance', label: 'Insurance' },
-  { href: '/dashboard/subscriptions', label: 'Subscriptions' },
+  { href: '/dashboard/billing',      label: 'Billing' },
+  { href: '/dashboard/goals',        label: 'Goals' },
+  { href: '/dashboard/plan',         label: 'Plan' },
+  { href: '/dashboard/investments',  label: 'Investments' },
+  { href: '/dashboard/insurance',    label: 'Insurance' },
 ]
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
