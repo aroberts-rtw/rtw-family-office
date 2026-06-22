@@ -1,6 +1,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { db } from '@/lib/db'
 import ConnectButton from '@/components/ConnectButton'
+import SyncButton from '@/components/SyncButton'
 
 export default async function DashboardPage() {
   const { userId } = await auth()
@@ -28,7 +29,10 @@ export default async function DashboardPage() {
           <h1 className="text-2xl font-semibold">Overview</h1>
           <p className="text-gray-400 text-sm mt-0.5">Roberts Household · {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
         </div>
-        <ConnectButton />
+        <div className="flex items-center gap-2">
+          <SyncButton />
+          <ConnectButton />
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-4">
