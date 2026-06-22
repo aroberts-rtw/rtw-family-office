@@ -1,0 +1,101 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// One row per connected institution (bank, brokerage, etc.)
+model PlaidItem {
+  id              String    @id @default(cuid())
+  userId          String
+  accessToken     String
+  itemId          String    @unique
+  institutionId   String?
+  institutionName String?
+  cursor          String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  accounts        Account[]
+}
+
+model Account {
+  id               String        @id @default(cuid())
+  plaidItemId      String
+  plaidAccountId   String        @unique
+  name             String
+  officialName     String?
+  type             String        // depository, investment, credit, loan
+  subtype          String?
+  mask             String?
+  currentBalance   Float?
+  availableBalance Float?
+  isoCurrencyCode  String?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  plaidItem        PlaidItem     @relation(fields: [plaidItemId], references: [id])
+  transactions     Transaction[]
+  holdings         Holding[]
+}
+
+model Transaction {
+  id                 String   @id @default(cuid())
+  accountId          String
+  plaidTransactionId String   @unique
+  amount             Float
+  date               DateTime
+  name               String
+  merchantName       String?
+  category           String[]
+  pending            Boolean  @default(false)
+  isoCurrencyCode    String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  account            Account  @relation(fields: [accountId], references: [id])
+}
+
+// Investment holdings (brokerage positions)
+model Holding {
+  id                  String   @id @default(cuid())
+  accountId           String
+  securityId          String
+  institutionSecId    String?
+  costBasis           Float?
+  quantity            Float
+  institutionValue    Float
+  isoCurrencyCode     String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  account             Account  @relation(fields: [accountId], references: [id])
+
+  @@unique([accountId, securityId])
+}
+
+// Periodic net worth snapshots for trending
+model NetWorthSnapshot {
+  id          String   @id @default(cuid())
+  date        DateTime @default(now())
+  assets      Float
+  liabilities Float
+  netWorth    Float
+  breakdown   Json
+  createdAt   DateTime @default(now())
+}
+
+// Manually entered insurance policies
+model InsurancePolicy {
+  id               String    @id @default(cuid())
+  userId           String
+  type             String    // life, health, auto, home, umbrella, disability
+  carrier          String
+  policyNumber     String?
+  coverageAmount   Float?
+  annualPremium    Float
+  renewalDate      DateTime?
+  beneficiary      String?
+  notes            String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+}
