@@ -12,7 +12,9 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  const { name, category, value, notes } = await req.json()
-  const asset = await db.manualAsset.create({ data: { userId, name, category, value: parseFloat(value), notes } })
+  const { name, category, value, notes, address, vehicleYear, vehicleMake, vehicleModel, vehicleTrim, vehicleMileage, zipCode } = await req.json()
+  const asset = await db.manualAsset.create({
+    data: { userId, name, category, value: parseFloat(value), notes, address, vehicleYear, vehicleMake, vehicleModel, vehicleTrim, vehicleMileage, zipCode },
+  })
   return NextResponse.json(asset)
 }

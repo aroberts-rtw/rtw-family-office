@@ -6,10 +6,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   const { userId } = await auth()
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
-  const { name, category, value, notes } = await req.json()
+  const { name, category, value, notes, address, vehicleYear, vehicleMake, vehicleModel, vehicleTrim, vehicleMileage, zipCode } = await req.json()
   const asset = await db.manualAsset.updateMany({
     where: { id, userId },
-    data: { name, category, value: parseFloat(value), notes },
+    data: { name, category, value: parseFloat(value), notes, address, vehicleYear, vehicleMake, vehicleModel, vehicleTrim, vehicleMileage, zipCode },
   })
   return NextResponse.json(asset)
 }
