@@ -101,6 +101,39 @@ model InsurancePolicy {
   updatedAt        DateTime  @updatedAt
 }
 
+// Estimated tax payments tracker
+model TaxYear {
+  id                String        @id @default(cuid())
+  userId            String
+  year              Int
+  filingStatus      String        @default("MFJ") // MFJ, MFS, Single, HOH
+  priorYearTax      Float?
+  estimatedIncome   Float?
+  estimatedDeductions Float?
+  notes             String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  payments          TaxPayment[]
+
+  @@unique([userId, year])
+}
+
+model TaxPayment {
+  id          String   @id @default(cuid())
+  taxYearId   String
+  quarter     Int      // 1, 2, 3, 4
+  dueDate     DateTime
+  amountDue   Float?
+  amountPaid  Float?
+  paidDate    DateTime?
+  method      String?  // EFTPS, check, etc.
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  taxYear     TaxYear  @relation(fields: [taxYearId], references: [id], onDelete: Cascade)
+
+  @@unique([taxYearId, quarter])
+}
+
 // Monthly spending budgets per category
 model Budget {
   id        String   @id @default(cuid())

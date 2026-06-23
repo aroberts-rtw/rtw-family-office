@@ -63,6 +63,12 @@ export default async function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <a
+            href="/api/reports/net-worth"
+            className="px-3 py-2 rounded-lg text-sm bg-gray-800 text-gray-300 hover:text-white hover:bg-gray-700 transition-colors"
+          >
+            Export PDF
+          </a>
           <SyncButton />
           <ConnectButton />
         </div>

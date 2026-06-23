@@ -1,11 +1,33 @@
-export default function TaxPage() {
+import { auth } from '@clerk/nextjs/server'
+import { db } from '@/lib/db'
+import TaxClient from '@/components/TaxClient'
+
+export default async function TaxPage() {
+  const { userId } = await auth()
+  const year = new Date().getFullYear()
+
+  const taxYear = await db.taxYear.findUnique({
+    where: { userId_year: { userId: userId!, year } },
+    include: { payments: { orderBy: { quarter: 'asc' } } },
+  })
+
+  const serialized = taxYear ? {
+    ...taxYear,
+    createdAt: taxYear.createdAt.toISOString(),
+    updatedAt: taxYear.updatedAt.toISOString(),
+    payments: taxYear.payments.map((p) => ({
+      ...p,
+      dueDate:   p.dueDate.toISOString(),
+      paidDate:  p.paidDate?.toISOString() ?? null,
+      createdAt: p.createdAt.toISOString(),
+      updatedAt: p.updatedAt.toISOString(),
+    })),
+  } : null
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Tax</h1>
-      <div className="border border-dashed border-gray-800 rounded-xl p-16 text-center">
-        <p className="text-gray-400 text-sm">Tax advisory module coming in Phase 3.</p>
-        <p className="text-gray-600 text-xs mt-2">Estimated payments, withholding analysis, QBO integration, and year-end projections.</p>
-      </div>
+      <TaxClient initial={serialized} year={year} />
     </div>
   )
 }
