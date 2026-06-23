@@ -1,11 +1,23 @@
-export default function InsurancePage() {
+import { auth } from '@clerk/nextjs/server'
+import { db } from '@/lib/db'
+import InsuranceClient from '@/components/InsuranceClient'
+
+export default async function InsurancePage() {
+  const { userId } = await auth()
+  const policies = await db.insurancePolicy.findMany({
+    where: { userId: userId! },
+    orderBy: { type: 'asc' },
+  })
+  const serialized = policies.map((p) => ({
+    ...p,
+    renewalDate: p.renewalDate?.toISOString() ?? null,
+    createdAt: p.createdAt.toISOString(),
+    updatedAt: p.updatedAt.toISOString(),
+  }))
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">Insurance</h1>
-      <div className="border border-dashed border-gray-800 rounded-xl p-16 text-center">
-        <p className="text-gray-400 text-sm">Insurance inventory coming in Phase 2.</p>
-        <p className="text-gray-600 text-xs mt-2">Life, health, auto, home, umbrella, and disability policies — renewal dates, coverage gaps, and premium tracking.</p>
-      </div>
+      <InsuranceClient initial={serialized} />
     </div>
   )
 }

@@ -25,22 +25,25 @@ const CATEGORY_COLORS: Record<string, string> = {
   'Tax':               'bg-cyan-500',
   'Income':            'bg-emerald-500',
 }
+function categoryColor(cat: string) { return CATEGORY_COLORS[cat] ?? 'bg-gray-600' }
+function topCategory(cats: string[]) { return cats?.[0] ?? 'Uncategorized' }
 
-function categoryColor(cat: string) {
-  return CATEGORY_COLORS[cat] ?? 'bg-gray-600'
-}
+export default function TransactionView({
+  transactions, budgets, mtdSpend,
+}: {
+  transactions: Tx[]
+  budgets: Record<string, number>
+  mtdSpend: Record<string, number>
+}) {
+  const [view, setView]           = useState<'category' | 'date'>('category')
+  const [expanded, setExpanded]   = useState<string | null>(null)
+  const [editBudget, setEditBudget] = useState<string | null>(null)
+  const [budgetInput, setBudgetInput] = useState('')
+  const [localBudgets, setLocalBudgets] = useState(budgets)
 
-function topCategory(cats: string[]) {
-  return cats?.[0] ?? 'Uncategorized'
-}
-
-export default function TransactionView({ transactions }: { transactions: Tx[] }) {
-  const [view, setView] = useState<'category' | 'date'>('category')
-  const [expanded, setExpanded] = useState<string | null>(null)
-
-  const charges = transactions.filter((tx) => tx.amount > 0)
+  const charges  = transactions.filter((tx) => tx.amount > 0)
   const totalSpent = charges.reduce((s, tx) => s + tx.amount, 0)
-  const totalIn = transactions.filter((tx) => tx.amount < 0).reduce((s, tx) => s + Math.abs(tx.amount), 0)
+  const totalIn  = transactions.filter((tx) => tx.amount < 0).reduce((s, tx) => s + Math.abs(tx.amount), 0)
 
   const byCategory = useMemo(() => {
     const map: Record<string, { total: number; txs: Tx[] }> = {}
@@ -54,6 +57,20 @@ export default function TransactionView({ transactions }: { transactions: Tx[] }
   }, [transactions])
 
   const toggle = (cat: string) => setExpanded(expanded === cat ? null : cat)
+
+  const saveBudget = async (cat: string) => {
+    const amt = parseFloat(budgetInput)
+    if (!isNaN(amt) && amt > 0) {
+      await fetch('/api/budgets', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category: cat, amount: amt }) })
+      setLocalBudgets((prev) => ({ ...prev, [cat]: amt }))
+    }
+    setEditBudget(null); setBudgetInput('')
+  }
+
+  const removeBudget = async (cat: string) => {
+    await fetch('/api/budgets', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ category: cat }) })
+    setLocalBudgets((prev) => { const n = { ...prev }; delete n[cat]; return n })
+  }
 
   return (
     <div className="space-y-6">
@@ -77,12 +94,8 @@ export default function TransactionView({ transactions }: { transactions: Tx[] }
           <p className="text-xs text-gray-400 uppercase tracking-wide">Spending breakdown</p>
           <div className="flex h-3 rounded-full overflow-hidden gap-px">
             {byCategory.map(([cat, { total }]) => (
-              <div
-                key={cat}
-                className={`${categoryColor(cat)} transition-all`}
-                style={{ width: `${(total / totalSpent) * 100}%` }}
-                title={`${cat}: ${fmt(total)}`}
-              />
+              <div key={cat} className={`${categoryColor(cat)} transition-all`}
+                style={{ width: `${(total / totalSpent) * 100}%` }} title={`${cat}: ${fmt(total)}`} />
             ))}
           </div>
           <div className="flex flex-wrap gap-3">
@@ -100,11 +113,8 @@ export default function TransactionView({ transactions }: { transactions: Tx[] }
       {/* View toggle */}
       <div className="flex gap-2">
         {(['category', 'date'] as const).map((v) => (
-          <button
-            key={v}
-            onClick={() => setView(v)}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors capitalize ${view === v ? 'bg-white text-black' : 'bg-gray-800 text-gray-400 hover:text-white'}`}
-          >
+          <button key={v} onClick={() => setView(v)}
+            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors capitalize ${view === v ? 'bg-white text-black' : 'bg-gray-800 text-gray-400 hover:text-white'}`}>
             {v === 'category' ? 'By Category' : 'By Date'}
           </button>
         ))}
@@ -113,40 +123,87 @@ export default function TransactionView({ transactions }: { transactions: Tx[] }
       {/* Category view */}
       {view === 'category' && (
         <div className="space-y-2">
-          {byCategory.map(([cat, { total, txs }]) => (
-            <div key={cat} className="rounded-xl overflow-hidden">
-              <button
-                onClick={() => toggle(cat)}
-                className="w-full flex items-center justify-between bg-gray-900 px-4 py-3 hover:bg-gray-800 transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full ${categoryColor(cat)}`} />
-                  <span className="text-sm font-medium">{cat}</span>
-                  <span className="text-xs text-gray-500">{txs.length} transactions</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-sm font-semibold text-red-400">{fmt(total)}</span>
-                  <span className="text-xs text-gray-600">{expanded === cat ? '▲' : '▼'}</span>
-                </div>
-              </button>
-              {expanded === cat && (
-                <div className="border-t border-gray-800 divide-y divide-gray-800">
-                  {txs.map((tx) => (
-                    <div key={tx.id} className="bg-gray-900 px-4 py-2.5 flex justify-between items-center pl-10">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm truncate">{tx.merchantName ?? tx.name}</p>
-                        <p className="text-xs text-gray-500">{tx.institution} · {fmtDate(tx.date)}</p>
-                      </div>
-                      <div className="ml-4 text-right shrink-0">
-                        <p className="text-sm font-medium text-red-400">{fmt(tx.amount)}</p>
-                        {tx.pending && <p className="text-xs text-yellow-500">Pending</p>}
-                      </div>
+          {byCategory.map(([cat, { total, txs }]) => {
+            const budget  = localBudgets[cat]
+            const mtd     = mtdSpend[cat] ?? 0
+            const pct     = budget ? Math.min(100, (mtd / budget) * 100) : null
+            const over    = budget ? mtd > budget : false
+            return (
+              <div key={cat} className="rounded-xl overflow-hidden">
+                <button onClick={() => toggle(cat)}
+                  className="w-full flex items-center justify-between bg-gray-900 px-4 py-3 hover:bg-gray-800 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-3 h-3 rounded-full ${categoryColor(cat)}`} />
+                    <span className="text-sm font-medium">{cat}</span>
+                    <span className="text-xs text-gray-500">{txs.length} transactions</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {budget && (
+                      <span className={`text-xs ${over ? 'text-red-400 font-semibold' : 'text-gray-500'}`}>
+                        {fmt(mtd)} / {fmt(budget)} MTD{over ? ' ⚠️' : ''}
+                      </span>
+                    )}
+                    <span className="text-sm font-semibold text-red-400">{fmt(total)}</span>
+                    <span className="text-xs text-gray-600">{expanded === cat ? '▲' : '▼'}</span>
+                  </div>
+                </button>
+
+                {/* Budget progress bar */}
+                {pct !== null && (
+                  <div className={`h-1 ${over ? 'bg-red-900' : 'bg-gray-800'}`}>
+                    <div className={`h-full transition-all ${over ? 'bg-red-500' : 'bg-blue-500'}`} style={{ width: `${pct}%` }} />
+                  </div>
+                )}
+
+                {expanded === cat && (
+                  <div className="border-t border-gray-800">
+                    {/* Budget controls */}
+                    <div className="px-4 py-2 flex items-center gap-3 bg-gray-900 border-b border-gray-800">
+                      {editBudget === cat ? (
+                        <>
+                          <input
+                            type="number" placeholder="Monthly budget $"
+                            value={budgetInput} onChange={(e) => setBudgetInput(e.target.value)}
+                            className="input text-xs w-40"
+                            autoFocus
+                          />
+                          <button onClick={() => saveBudget(cat)} className="text-xs text-blue-400 hover:text-blue-200">Save</button>
+                          <button onClick={() => { setEditBudget(null); setBudgetInput('') }} className="text-xs text-gray-500 hover:text-white">Cancel</button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="text-xs text-gray-500">
+                            {budget ? `Budget: ${fmt(budget)}/mo` : 'No budget set'}
+                          </span>
+                          <button onClick={() => { setEditBudget(cat); setBudgetInput(budget ? String(budget) : '') }}
+                            className="text-xs text-blue-400 hover:text-blue-200">
+                            {budget ? 'Edit budget' : 'Set budget'}
+                          </button>
+                          {budget && (
+                            <button onClick={() => removeBudget(cat)} className="text-xs text-gray-600 hover:text-red-400">Remove</button>
+                          )}
+                        </>
+                      )}
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+                    <div className="divide-y divide-gray-800">
+                      {txs.map((tx) => (
+                        <div key={tx.id} className="bg-gray-900 px-4 py-2.5 flex justify-between items-center pl-10">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm truncate">{tx.merchantName ?? tx.name}</p>
+                            <p className="text-xs text-gray-500">{tx.institution} · {fmtDate(tx.date)}</p>
+                          </div>
+                          <div className="ml-4 text-right shrink-0">
+                            <p className="text-sm font-medium text-red-400">{fmt(tx.amount)}</p>
+                            {tx.pending && <p className="text-xs text-yellow-500">Pending</p>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
 
@@ -177,9 +234,8 @@ export default function TransactionView({ transactions }: { transactions: Tx[] }
 }
 
 function fmt(v: number) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(v)
+  return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v)
 }
-
 function fmtDate(d: string) {
   return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }

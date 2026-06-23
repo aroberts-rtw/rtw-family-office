@@ -101,6 +101,18 @@ model InsurancePolicy {
   updatedAt        DateTime  @updatedAt
 }
 
+// Monthly spending budgets per category
+model Budget {
+  id        String   @id @default(cuid())
+  userId    String
+  category  String   // must match Plaid category name
+  amount    Float
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, category])
+}
+
 // Financial goals
 model Goal {
   id          String    @id @default(cuid())

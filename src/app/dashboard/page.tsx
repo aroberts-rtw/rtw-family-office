@@ -2,19 +2,30 @@ import { auth } from '@clerk/nextjs/server'
 import { db } from '@/lib/db'
 import ConnectButton from '@/components/ConnectButton'
 import SyncButton from '@/components/SyncButton'
+import NetWorthChart from '@/components/NetWorthChart'
 
 export default async function DashboardPage() {
   const { userId } = await auth()
 
-  const accounts = await db.account.findMany({
-    where: { plaidItem: { userId: userId! } },
-    include: { plaidItem: true },
-    orderBy: { currentBalance: 'desc' },
-  })
+  const [accounts, manualAssets, snapshots] = await Promise.all([
+    db.account.findMany({
+      where: { plaidItem: { userId: userId! } },
+      include: { plaidItem: true },
+      orderBy: { currentBalance: 'desc' },
+    }),
+    db.manualAsset.findMany({ where: { userId: userId! } }),
+    db.netWorthSnapshot.findMany({
+      orderBy: { date: 'asc' },
+      take: 90,
+    }),
+  ])
 
-  const assets = accounts
-    .filter((a) => ['depository', 'investment'].includes(a.type))
+  const plaidAssets = accounts
+    .filter((a) => ['depository', 'investment', 'other'].includes(a.type))
     .reduce((sum, a) => sum + (a.currentBalance ?? 0), 0)
+
+  const manualTotal = manualAssets.reduce((s, a) => s + a.value, 0)
+  const assets      = plaidAssets + manualTotal
 
   const liabilities = accounts
     .filter((a) => ['credit', 'loan'].includes(a.type))
@@ -22,12 +33,34 @@ export default async function DashboardPage() {
 
   const netWorth = assets - liabilities
 
+  const chartData = snapshots.map((s) => ({
+    date: s.date.toISOString(),
+    netWorth: s.netWorth,
+    assets: s.assets,
+    liabilities: s.liabilities,
+  }))
+
+  // Spending summary — last 30 days
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000)
+  const recentTx = await db.transaction.findMany({
+    where: {
+      account: { plaidItem: { userId: userId! } },
+      date: { gte: thirtyDaysAgo },
+      amount: { gt: 0 },
+      pending: false,
+    },
+    select: { amount: true },
+  })
+  const spent30 = recentTx.reduce((s, t) => s + t.amount, 0)
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Overview</h1>
-          <p className="text-gray-400 text-sm mt-0.5">Roberts Household · {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</p>
+          <p className="text-gray-400 text-sm mt-0.5">
+            Roberts Household · {new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <SyncButton />
@@ -35,12 +68,18 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        <StatCard label="Net Worth" value={netWorth} highlight />
-        <StatCard label="Total Assets" value={assets} />
+      {/* Net worth chart */}
+      <NetWorthChart snapshots={chartData} />
+
+      {/* KPI row */}
+      <div className="grid grid-cols-4 gap-4">
+        <StatCard label="Total Assets"      value={assets}      />
         <StatCard label="Total Liabilities" value={liabilities} negative />
+        <StatCard label="Spent (30d)"       value={spent30}     negative />
+        <StatCard label="Accounts"          value={accounts.length} count />
       </div>
 
+      {/* Account list */}
       {accounts.length === 0 ? (
         <div className="border border-dashed border-gray-800 rounded-xl p-16 text-center">
           <p className="text-gray-400 text-sm mb-4">No accounts connected yet</p>
@@ -48,8 +87,8 @@ export default async function DashboardPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wide">Accounts</h2>
-          <div className="space-y-2">
+          <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wide">All Accounts</h2>
+          <div className="space-y-1.5">
             {accounts.map((account) => (
               <div key={account.id} className="flex justify-between items-center bg-gray-900 rounded-lg px-4 py-3">
                 <div>
@@ -59,8 +98,8 @@ export default async function DashboardPage() {
                     {account.mask ? ` ···${account.mask}` : ''}
                   </p>
                 </div>
-                <p className="font-semibold text-sm">
-                  {formatCurrency(account.currentBalance ?? 0)}
+                <p className={`font-semibold text-sm ${['credit', 'loan'].includes(account.type) ? 'text-red-400' : ''}`}>
+                  {fmt(Math.abs(account.currentBalance ?? 0))}
                 </p>
               </div>
             ))}
@@ -71,27 +110,21 @@ export default async function DashboardPage() {
   )
 }
 
-function StatCard({ label, value, highlight, negative }: {
-  label: string
-  value: number
-  highlight?: boolean
-  negative?: boolean
+function StatCard({ label, value, negative, count }: {
+  label: string; value: number; negative?: boolean; count?: boolean
 }) {
   return (
-    <div className={`rounded-xl p-5 ${highlight ? 'bg-blue-950 border border-blue-800' : 'bg-gray-900'}`}>
+    <div className="rounded-xl p-4 bg-gray-900">
       <p className="text-xs text-gray-400 uppercase tracking-wide">{label}</p>
-      <p className={`text-2xl font-semibold mt-2 ${negative ? 'text-red-400' : ''}`}>
-        {formatCurrency(value)}
+      <p className={`text-xl font-semibold mt-2 ${negative ? 'text-red-400' : ''}`}>
+        {count ? value : fmt(value)}
       </p>
     </div>
   )
 }
 
-function formatCurrency(value: number) {
+function fmt(v: number) {
   return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(value)
+    style: 'currency', currency: 'USD', minimumFractionDigits: 0, maximumFractionDigits: 0,
+  }).format(v)
 }
